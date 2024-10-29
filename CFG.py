@@ -39,17 +39,15 @@ def eliminar_recursividad_izquierda(gramatica):
 
         for produccion in producciones:
             if produccion[0] == no_terminal:
-                recursivas.append(produccion[1:])  # Separar el símbolo recursivo
+                recursivas.append(produccion[1:])
             else:
                 no_recursivas.append(produccion)
 
         if recursivas:
-            # Crear un nuevo símbolo para eliminar la recursividad
             nuevo_no_terminal = no_terminal + "'"
             nueva_gramatica[no_terminal] = []
             nueva_gramatica[nuevo_no_terminal] = []
 
-            # Agregar las producciones modificadas
             for prod in no_recursivas:
                 nueva_gramatica[no_terminal].append(prod + [nuevo_no_terminal])
             for prod in recursivas:
@@ -77,28 +75,23 @@ def eliminar_epsilon(gramatica):
     for no_terminal in generadores_epsilon:
         gramatica[no_terminal] = [prod for prod in gramatica[no_terminal] if prod != ['ε']]
 
-    # Expandir la gramática para incluir combinaciones sin los generadores de epsilon
     for no_terminal, producciones in list(gramatica.items()):
-        nuevas_producciones = set()  # Usar un conjunto para evitar duplicados
+        nuevas_producciones = set()
         for produccion in producciones:
-            # Generar combinaciones al omitir símbolos que generan epsilon
             combinaciones = [produccion]
             for simbolo in produccion:
                 if simbolo in generadores_epsilon:
                     nuevas_combinaciones = []
                     for comb in combinaciones:
-                        # Agregar la combinación sin el símbolo
                         nueva_comb = [s for s in comb if s != simbolo]
-                        nuevas_combinaciones.append(comb)  # Con símbolo
-                        if nueva_comb:  # Solo añadir si no está vacío
-                            nuevas_combinaciones.append(nueva_comb)  # Sin símbolo
+                        nuevas_combinaciones.append(comb)
+                        if nueva_comb:
+                            nuevas_combinaciones.append(nueva_comb)
                     combinaciones = nuevas_combinaciones
-            # Añadir combinaciones únicas
             nuevas_producciones.update(tuple(comb) for comb in combinaciones if comb)
 
         gramatica[no_terminal].extend(list(nuevas_producciones))
 
-    # Convertir las producciones nuevamente a listas
     for no_terminal, producciones in gramatica.items():
         gramatica[no_terminal] = [list(prod) for prod in set(tuple(p) for p in producciones)]
 
@@ -110,25 +103,19 @@ def eliminar_unarias(gramatica):
     :param gramatica: Diccionario que representa las producciones de la gramática.
     :return: Gramática sin producciones unitarias.
     """
-    # Crear un diccionario para almacenar las producciones sin las unitarias
     nueva_gramatica = {nt: [] for nt in gramatica}
 
-    # Para cada no terminal, eliminar producciones unitarias
     for no_terminal, producciones in gramatica.items():
-        # Encontrar todas las producciones no unitarias directamente
         no_unitarias = [prod for prod in producciones if len(prod) != 1 or prod[0] not in gramatica]
         nueva_gramatica[no_terminal].extend(no_unitarias)
 
-        # Encontrar producciones unitarias y sus derivaciones finales
         unitarias = [prod[0] for prod in producciones if len(prod) == 1 and prod[0] in gramatica]
         while unitarias:
             unidad = unitarias.pop()
             for prod in gramatica[unidad]:
-                # Si es una producción no unitaria, añadirla
                 if len(prod) != 1 or prod[0] not in gramatica:
                     if prod not in nueva_gramatica[no_terminal]:
                         nueva_gramatica[no_terminal].append(prod)
-                # Si es otra producción unitaria, añadir para verificar
                 elif prod[0] not in unitarias:
                     unitarias.append(prod[0])
 
@@ -144,7 +131,7 @@ def eliminar_inutiles(gramatica, simbolo_inicial):
     generativas = set()
     for no_terminal, producciones in gramatica.items():
         for produccion in producciones:
-            if all(not symbol.isupper() for symbol in produccion):  # Si todas son terminales
+            if all(not symbol.isupper() for symbol in produccion):
                 generativas.add(no_terminal)
 
     cambio = True
@@ -192,22 +179,18 @@ def procesar_terminales(terminales, gramatica, no_terminales):
     nuevas_producciones = {}
     nuevos_no_terminales = {}
 
-    # Genera un nuevo símbolo no terminal para cada terminal si es necesario
     for terminal in terminales:
         nuevo_no_terminal = f"q{len(nuevos_no_terminales) + 1}"
         nuevos_no_terminales[terminal] = nuevo_no_terminal
-        nuevas_producciones[nuevo_no_terminal] = [[terminal]]  # Producción unitaria para el terminal
+        nuevas_producciones[nuevo_no_terminal] = [[terminal]]
 
-    # Procesa cada producción en la gramática
     for no_terminal, producciones in gramatica.items():
         nuevas_producciones[no_terminal] = []
 
         for rhs in producciones:
-            # Solo reemplazar terminales en producciones largas (de más de un símbolo)
             if len(rhs) > 1:
                 nueva_produccion = []
                 for simbolo in rhs:
-                    # Si es un terminal en una producción larga, reemplazar por su no terminal asignado
                     if simbolo in terminales:
                         nuevo_no_terminal = nuevos_no_terminales[simbolo]
                         nueva_produccion.append(nuevo_no_terminal)
@@ -215,7 +198,6 @@ def procesar_terminales(terminales, gramatica, no_terminales):
                         nueva_produccion.append(simbolo)
                 nuevas_producciones[no_terminal].append(nueva_produccion)
             else:
-                # Mantener producciones unitarias con terminales intactas
                 nuevas_producciones[no_terminal].append(rhs)
 
     return nuevas_producciones
@@ -233,7 +215,6 @@ def convertir_a_cnf(gramatica):
         gramatica_cnf[no_terminal] = []
 
         for produccion in producciones:
-            # Dividir producciones largas en binarias
             while len(produccion) > 2:
                 A, B = produccion[0], produccion[1]
                 nuevo_no_terminal = f"C{contador_no_terminales}"
