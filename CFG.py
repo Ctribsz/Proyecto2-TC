@@ -1,42 +1,6 @@
 # Proyecto 2 - Christian Echeverría
 # Teoria de la computación
 
-def print_g (gramatica):
-    for no_terminal, producciones in gramatica.items():
-        producciones_formateadas = " | ".join(" ".join(prod) for prod in producciones)
-        print(f"{no_terminal} -> {producciones_formateadas}")
-
-def gr_reader(file_path):
-    gramatica = {}
-    simbolo_inicial = None
-
-    with open(file_path, 'r') as file:
-        for linea in file:
-            linea = linea.strip()
-
-            # Aquí nos encargamos de separar la parte izquierda de la derecha
-            # La parte de la producción y del símbolo que la produce
-            if "->" in linea:
-                no_terminal, producciones = linea.split("->")
-                no_terminal = no_terminal.strip()
-                producciones = producciones.strip().split("|")
-
-                # Si es la primera vez que vemos un no terminal, lo usamos como símbolo inicial
-                if simbolo_inicial is None:
-                    simbolo_inicial = no_terminal
-
-                if no_terminal not in gramatica:
-                    gramatica[no_terminal] = [prod.strip().split() for prod in producciones]
-                else:
-                    gramatica[no_terminal].extend([prod.strip().split() for prod in producciones])
-
-    print("\nGramática leída:")
-    for nt, prods in gramatica.items():
-        for prod in prods:
-            print(f"{nt} -> {' '.join(prod)}")
-
-    return gramatica, simbolo_inicial
-
 def descomponer_producciones(gramatica):
     """
     Descompone las producciones con múltiples símbolos en el lado derecho para cumplir con la CNF.
@@ -63,138 +27,112 @@ def descomponer_producciones(gramatica):
 
 def eliminar_recursividad_izquierda(gramatica):
     """
-    Elimina la recursividad a la izquierda (directa e indirecta) de una gramática.
-    :param gramatica: Diccionario que representa la gramática.
-    :return: Nueva gramática sin recursividad a la izquierda.
+    Elimina la recursividad a la izquierda en la gramática.
+    :param gramatica: Diccionario que representa las producciones de la gramática.
+    :return: Gramática sin recursividad a la izquierda.
     """
-    no_terminales = list(gramatica.keys())
     nueva_gramatica = {}
 
-    for i, no_terminal in enumerate(no_terminales):
-        nuevas_producciones = []
-
-        print(f"\nProcesando {no_terminal}: {gramatica[no_terminal]}")
-
-        for produccion in gramatica[no_terminal]:
-            if produccion[0] in no_terminales[:i]:
-                print(f"Encontrada recursividad indirecta: {no_terminal} -> {produccion}")
-                for prod in gramatica[produccion[0]]:
-                    nuevas_producciones.append(prod + produccion[1:])
-                    print(f"Sustituida producción: {produccion} por {prod + produccion[1:]}")
-            else:
-                nuevas_producciones.append(produccion)
-
-        print(f"Producciones reescritas para {no_terminal}: {nuevas_producciones}")
-
+    for no_terminal, producciones in gramatica.items():
         recursivas = []
         no_recursivas = []
-        for produccion in nuevas_producciones:
+
+        for produccion in producciones:
             if produccion[0] == no_terminal:
-                print(f"Recursiva encontrada: {no_terminal} -> {produccion}")
-                recursivas.append(produccion[1:])  # Guardamos α
+                recursivas.append(produccion[1:])  # Separar el símbolo recursivo
             else:
                 no_recursivas.append(produccion)
 
         if recursivas:
+            # Crear un nuevo símbolo para eliminar la recursividad
             nuevo_no_terminal = no_terminal + "'"
+            nueva_gramatica[no_terminal] = []
+            nueva_gramatica[nuevo_no_terminal] = []
 
-            nueva_gramatica[no_terminal] = [[*prod, nuevo_no_terminal] for prod in no_recursivas]
-            print(f"Nuevas producciones para {no_terminal}: {nueva_gramatica[no_terminal]}")
-
-            nueva_gramatica[nuevo_no_terminal] = [[*alpha, nuevo_no_terminal] for alpha in recursivas]
-            nueva_gramatica[nuevo_no_terminal].append(['ε'])  # Agregar epsilon para terminar recursividad
-            print(f"Producciones recursivas para {nuevo_no_terminal}: {nueva_gramatica[nuevo_no_terminal]}")
+            # Agregar las producciones modificadas
+            for prod in no_recursivas:
+                nueva_gramatica[no_terminal].append(prod + [nuevo_no_terminal])
+            for prod in recursivas:
+                nueva_gramatica[nuevo_no_terminal].append(prod + [nuevo_no_terminal])
+            nueva_gramatica[nuevo_no_terminal].append(['ε'])  # Producción epsilon
         else:
-            nueva_gramatica[no_terminal] = no_recursivas
-            print(f"Sin recursividad para {no_terminal}, nuevas producciones: {nueva_gramatica[no_terminal]}")
+            nueva_gramatica[no_terminal] = producciones
 
     return nueva_gramatica
 
-def eliminar_e(gramatica):
-    producciones_e = set()
-
-    # Primero encontramos las producciones de tipo epsilon directas
-    for non_terminal, producciones in gramatica.items():
-        for produccion in producciones:
-            if produccion == ['ε']:
-                producciones_e.add(non_terminal)
-
-    # Se itera sobre las producciones para hacer un match de cuales pueden ser
-    # indirectamente anulables y si se encuentra se vuelve a hacer esto para que la
-    # nueva produccion tambien se "tome en cuenta" a la hora de quitar anulables
-    prod_anulables = True
-    while prod_anulables:
-        prod_anulables = False
-        for non_terminal, producciones in gramatica.items():
-            for produccion in producciones:
-                if all(symbol in producciones_e for symbol in produccion):
-                   if non_terminal not in producciones_e:
-                      producciones_e.add(non_terminal)
-                      prod_anulables = True
-
-    return producciones_e
-
-def crear_producciones_sinE(produccion, producciones_e):
+def eliminar_epsilon(gramatica):
     """
-    Genera combinaciones de producciones después de eliminar producciones epsilon.
+    Elimina las producciones epsilon de la gramática.
+    :param gramatica: Diccionario que representa las producciones de la gramática.
+    :return: Gramática sin producciones epsilon.
     """
-    resultantes = set()
-    cantidad_anulables = sum(1 for symbol in produccion if symbol in producciones_e)
-
-    # Generar todas las combinaciones posibles de mantener o eliminar los anulables
-    for i in range(2**cantidad_anulables):
-        nueva_produccion = []
-        nulable_count = 0
-        for symbol in produccion:
-            if symbol in producciones_e:
-                # Decidir si eliminamos este símbolo nulable en esta combinación
-                if i & (1 << nulable_count):
-                    nueva_produccion.append(symbol)
-                nulable_count += 1
-            else:
-                nueva_produccion.append(symbol)
-
-        # Evitar producciones vacías y agregar la producción válida
-        if nueva_produccion and nueva_produccion != ['e']:
-            resultantes.add(tuple(nueva_produccion))
-
-    return [list(prod) for prod in resultantes]
-
-def eliminar_producciones_e(gramatica):
-    producciones_e = eliminar_e(gramatica)
-
-    nueva_gramatica_sinE = {}
+    # Identificar no terminales que producen epsilon
+    generadores_epsilon = set()
     for no_terminal, producciones in gramatica.items():
-        nuevas_producciones = set()
         for produccion in producciones:
             if produccion == ['ε']:
-                continue
-            else:
-                combinaciones = crear_producciones_sinE(produccion, producciones_e)
-                nuevas_producciones.update(tuple(p) for p in combinaciones if p != ['e'])
+                generadores_epsilon.add(no_terminal)
 
+    # Remover producciones epsilon directas
+    for no_terminal in generadores_epsilon:
+        gramatica[no_terminal] = [prod for prod in gramatica[no_terminal] if prod != ['ε']]
 
-        nueva_gramatica_sinE[no_terminal] = [list(prod) for prod in nuevas_producciones]
+    # Expandir la gramática para incluir combinaciones sin los generadores de epsilon
+    for no_terminal, producciones in list(gramatica.items()):
+        nuevas_producciones = set()  # Usar un conjunto para evitar duplicados
+        for produccion in producciones:
+            # Generar combinaciones al omitir símbolos que generan epsilon
+            combinaciones = [produccion]
+            for simbolo in produccion:
+                if simbolo in generadores_epsilon:
+                    nuevas_combinaciones = []
+                    for comb in combinaciones:
+                        # Agregar la combinación sin el símbolo
+                        nueva_comb = [s for s in comb if s != simbolo]
+                        nuevas_combinaciones.append(comb)  # Con símbolo
+                        if nueva_comb:  # Solo añadir si no está vacío
+                            nuevas_combinaciones.append(nueva_comb)  # Sin símbolo
+                    combinaciones = nuevas_combinaciones
+            # Añadir combinaciones únicas
+            nuevas_producciones.update(tuple(comb) for comb in combinaciones if comb)
 
-    return nueva_gramatica_sinE
+        gramatica[no_terminal].extend(list(nuevas_producciones))
 
-def eliminar_unarias(nueva_gramatica):
-    nueva_grama_sinU = {}
+    # Convertir las producciones nuevamente a listas
+    for no_terminal, producciones in gramatica.items():
+        gramatica[no_terminal] = [list(prod) for prod in set(tuple(p) for p in producciones)]
 
-    for no_terminal in nueva_gramatica:
-        nueva_grama_sinU[no_terminal] = [prod for prod in nueva_gramatica[no_terminal] if len(prod) > 1 or not prod[0].isupper()]
+    return gramatica
 
-    for no_terminal, producciones in nueva_gramatica.items():
-        unitarias = [prod[0] for prod in producciones if len(prod) == 1 and prod[0].isupper()]
+def eliminar_unarias(gramatica):
+    """
+    Elimina las producciones unitarias de la gramática.
+    :param gramatica: Diccionario que representa las producciones de la gramática.
+    :return: Gramática sin producciones unitarias.
+    """
+    # Crear un diccionario para almacenar las producciones sin las unitarias
+    nueva_gramatica = {nt: [] for nt in gramatica}
+
+    # Para cada no terminal, eliminar producciones unitarias
+    for no_terminal, producciones in gramatica.items():
+        # Encontrar todas las producciones no unitarias directamente
+        no_unitarias = [prod for prod in producciones if len(prod) != 1 or prod[0] not in gramatica]
+        nueva_gramatica[no_terminal].extend(no_unitarias)
+
+        # Encontrar producciones unitarias y sus derivaciones finales
+        unitarias = [prod[0] for prod in producciones if len(prod) == 1 and prod[0] in gramatica]
         while unitarias:
-            U = unitarias.pop()
-            if U in nueva_gramatica:
-                for prod_de_U in nueva_gramatica[U]:
-                    if len(prod_de_U) > 1 or not prod_de_U[0].isupper():
-                        if prod_de_U not in nueva_grama_sinU[no_terminal]:
-                            nueva_grama_sinU[no_terminal].append(prod_de_U)
+            unidad = unitarias.pop()
+            for prod in gramatica[unidad]:
+                # Si es una producción no unitaria, añadirla
+                if len(prod) != 1 or prod[0] not in gramatica:
+                    if prod not in nueva_gramatica[no_terminal]:
+                        nueva_gramatica[no_terminal].append(prod)
+                # Si es otra producción unitaria, añadir para verificar
+                elif prod[0] not in unitarias:
+                    unitarias.append(prod[0])
 
-    return nueva_grama_sinU
+    return nueva_gramatica
 
 def eliminar_inutiles(gramatica, simbolo_inicial):
     """
@@ -231,183 +169,78 @@ def eliminar_inutiles(gramatica, simbolo_inicial):
         simbolo = por_explorar.pop()
         if simbolo in gramatica_generativa and simbolo not in alcanzables:
             alcanzables.add(simbolo)
-            print(f"Alcanzable: {simbolo}")
 
             for produccion in gramatica_generativa[simbolo]:
                 for simbolo_produccion in produccion:
                     if simbolo_produccion.isupper() and simbolo_produccion not in alcanzables:
-                        print(f"Explorando: {simbolo_produccion} desde {simbolo}")
                         por_explorar.append(simbolo_produccion)
 
     gramatica_final = {nt: prods for nt, prods in gramatica_generativa.items() if nt in alcanzables}
 
-    print(f"Producciones alcanzables después de este paso: {gramatica_final}")
-
     return gramatica_final
 
-def procesar_terminales(gramatica):
+def procesar_terminales(terminales, gramatica, no_terminales):
     """
-    Convierte los terminales en producciones separadas de CNF.
-    :param gramatica: Diccionario con las producciones.
-    :return: Nueva gramática con los terminales convertidos.
+    Convierte los terminales en no terminales solo en producciones largas (de más de un símbolo).
+    Mantiene terminales en producciones unitarias intactas (como `PP -> with`).
+
+    :param terminales: Conjunto de terminales de la gramática.
+    :param gramatica: Diccionario de reglas de la gramática en CNF.
+    :param no_terminales: Conjunto de no terminales de la gramática.
+    :return: Nueva gramática donde los terminales en producciones largas son reemplazados.
     """
+    nuevas_producciones = {}
     nuevos_no_terminales = {}
-    gramatica_cnf = {}
 
-    def obtener_no_terminal_para_terminal(terminal):
-        if terminal == "Det":
-            return ["a", "the"]
-        if terminal not in nuevos_no_terminales:
-            nuevo_no_terminal = f"T_{terminal.upper()}"
-            nuevos_no_terminales[terminal] = nuevo_no_terminal
-            gramatica_cnf[nuevo_no_terminal] = [[terminal]]
-        return [nuevos_no_terminales[terminal]]
+    # Genera un nuevo símbolo no terminal para cada terminal si es necesario
+    for terminal in terminales:
+        nuevo_no_terminal = f"q{len(nuevos_no_terminales) + 1}"
+        nuevos_no_terminales[terminal] = nuevo_no_terminal
+        nuevas_producciones[nuevo_no_terminal] = [[terminal]]  # Producción unitaria para el terminal
 
+    # Procesa cada producción en la gramática
+    for no_terminal, producciones in gramatica.items():
+        nuevas_producciones[no_terminal] = []
+
+        for rhs in producciones:
+            # Solo reemplazar terminales en producciones largas (de más de un símbolo)
+            if len(rhs) > 1:
+                nueva_produccion = []
+                for simbolo in rhs:
+                    # Si es un terminal en una producción larga, reemplazar por su no terminal asignado
+                    if simbolo in terminales:
+                        nuevo_no_terminal = nuevos_no_terminales[simbolo]
+                        nueva_produccion.append(nuevo_no_terminal)
+                    else:
+                        nueva_produccion.append(simbolo)
+                nuevas_producciones[no_terminal].append(nueva_produccion)
+            else:
+                # Mantener producciones unitarias con terminales intactas
+                nuevas_producciones[no_terminal].append(rhs)
+
+    return nuevas_producciones
+
+def convertir_a_cnf(gramatica):
+    """
+    Convierte las producciones largas en producciones binarias para cumplir con CNF.
+    :param gramatica: Diccionario con las producciones de la gramática.
+    :return: Gramática convertida a CNF.
+    """
     contador_no_terminales = 1
+    gramatica_cnf = {}
 
     for no_terminal, producciones in gramatica.items():
         gramatica_cnf[no_terminal] = []
 
         for produccion in producciones:
-            nueva_produccion = []
-            for simbolo in produccion:
-                if not simbolo.isupper():
-                    nueva_produccion += obtener_no_terminal_para_terminal(simbolo)
-                else:
-                    nueva_produccion.append(simbolo)
-
-            while len(nueva_produccion) > 2:
-                A, B = nueva_produccion[0], nueva_produccion[1]
-                nuevo_no_terminal = f"T_{contador_no_terminales}"
+            # Dividir producciones largas en binarias
+            while len(produccion) > 2:
+                A, B = produccion[0], produccion[1]
+                nuevo_no_terminal = f"C{contador_no_terminales}"
                 contador_no_terminales += 1
                 gramatica_cnf[nuevo_no_terminal] = [[A, B]]
-                nueva_produccion = [nuevo_no_terminal] + nueva_produccion[2:]
+                produccion = [nuevo_no_terminal] + produccion[2:]
 
-            gramatica_cnf[no_terminal].append(nueva_produccion)
-
-    return gramatica_cnf
-
-
-def convertir_a_CNF(gramatica):
-    """
-    Convierte una gramática a Forma Normal de Chomsky (CNF) después de que los terminales han sido manejados.
-    """
-    gramatica_cnf = {}
-    contador_no_terminales = 1
-
-    for no_terminal, producciones in gramatica.items():
-        gramatica_cnf[no_terminal] = []
-        for produccion in producciones:
-            if len(produccion) == 2:
-                gramatica_cnf[no_terminal].append(produccion)
-            else:
-                nueva_produccion = produccion
-                while len(nueva_produccion) > 2:
-                    A, B = nueva_produccion[0], nueva_produccion[1]
-                    nuevo_no_terminal = f"X_{contador_no_terminales}"
-                    contador_no_terminales += 1
-                    gramatica_cnf[nuevo_no_terminal] = [[A, B]]
-                    nueva_produccion = [nuevo_no_terminal] + nueva_produccion[2:]
-
-                gramatica_cnf[no_terminal].append(nueva_produccion)
+            gramatica_cnf[no_terminal].append(produccion)
 
     return gramatica_cnf
-
-def extraer_gramatica_cnf(cnf_gramatica):
-    """
-    Extrae los no terminales, terminales y las reglas de producción
-    de la gramática en CNF.
-    :param cnf_gramatica: Gramática en forma de diccionario.
-    :return: no_terminales, terminales, reglas de producción
-    """
-    no_terminales = set()
-    terminales = set()
-    reglas = {}
-
-    for lhs, rhs_list in cnf_gramatica.items():
-        no_terminales.add(lhs)
-        for rhs in rhs_list:
-            if len(rhs) == 1 and rhs[0].islower():
-                terminales.add(rhs[0])
-            if lhs not in reglas:
-                reglas[lhs] = []
-            reglas[lhs].append(rhs)
-
-    return list(no_terminales), list(terminales), reglas
-
-def cyk_parse(w, reglas, no_terminales, terminales):
-    n = len(w)
-
-    T = [[set() for j in range(n)] for i in range(n)]
-
-    for j in range(n):
-        for lhs, rhs_list in reglas.items():
-            for rhs in rhs_list:
-                if len(rhs) == 1 and rhs[0] == w[j]:
-                    T[j][j].add(lhs)
-                    print(f"Palabra '{w[j]}' generada por '{lhs}' en la posición [{j},{j}]")
-
-
-    for l in range(2, n+1):
-        for i in range(n-l+1):
-            j = i + l - 1
-            for k in range(i, j):
-                for lhs, rhs_list in reglas.items():
-                    for rhs in rhs_list:
-                        if len(rhs) == 2:
-                            if rhs[0] in T[i][k] and rhs[1] in T[k+1][j]:
-                                T[i][j].add(lhs)
-                                print(f"Combinación exitosa: {rhs[0]} y {rhs[1]} generan {lhs} en la posición [{i},{j}]")
-                            else:
-                                if rhs[0] not in T[i][k]:
-                                    print(f"No se encontró {rhs[0]} en la posición [{i},{k}]")
-                                if rhs[1] not in T[k+1][j]:
-                                    print(f"No se encontró {rhs[1]} en la posición [{k+1},{j}]")
-
-    if 'S' in T[0][n-1]:
-        print("La cadena pertenece al lenguaje.")
-    else:
-        print("La cadena NO pertenece al lenguaje.")
-
-    print("\nTabla CYK completa:")
-    for row in T:
-        print(row)
-
-file_path = "gramaticas.txt"
-
-gramatica, simbolo_inicial = gr_reader(file_path)
-
-print("\nGramática original leída desde el archivo:")
-print_g(gramatica)
-print(f"\nSímbolo inicial: {simbolo_inicial}")
-
-gramatica_sinR = eliminar_recursividad_izquierda(gramatica)
-
-gramatica_sinE = eliminar_producciones_e(gramatica_sinR)
-print("\nProducciones después de eliminar epsilon:")
-print_g(gramatica_sinE)
-
-gramatica_sinU = eliminar_unarias(gramatica_sinE)
-print("\nProducciones después de eliminar unitarias:")
-print_g(gramatica_sinU)
-
-gramatica_sin_inutiles = eliminar_inutiles(gramatica_sinU, simbolo_inicial)
-print("\nProducciones después de eliminar inútiles:")
-print_g(gramatica_sin_inutiles)
-
-gramatica_procesada_terminales = procesar_terminales(gramatica_sin_inutiles)
-print("\nProducciones después de procesar terminales:")
-print_g(gramatica_procesada_terminales)
-
-gramatica_CNF = convertir_a_CNF(gramatica_procesada_terminales)
-print("\nGramática en CNF:")
-print_g(gramatica_CNF)
-
-
-no_terminales, terminales, reglas = extraer_gramatica_cnf(gramatica_CNF)
-
-print("No terminales:", no_terminales)
-print("Terminales:", terminales)
-print("Reglas de producción:", reglas)
-
-cyk_parse(['she', 'cooks'], reglas, no_terminales, terminales)

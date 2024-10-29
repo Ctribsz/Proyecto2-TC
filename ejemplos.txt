@@ -1,3 +1,14 @@
+S -> a S | A | C
+A -> a
+B -> a a
+C -> a C b
+
+I -> a A B
+A -> B A b | ε | B
+B -> a | b | C D
+C -> b a
+D -> D D
+
 S -> NP VP
 VP -> VP PP
 VP -> V NP
